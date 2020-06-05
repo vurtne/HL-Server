@@ -1,0 +1,107 @@
+#!/bin/sh
+#
+# cs - this script starts and stops the cstrike daemon
+#
+# chkconfig:   - 85 15
+# description:  cstrike server
+# processname: hlds
+# config:      /etc/sysconfig/cstrike
+# pidfile:     /var/run/cstrike.pid
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source networking configuration.
+. /etc/sysconfig/network
+
+lockfile=/var/lock/subsys/cstrike.lock
+pidfile=/var/run/cstrike.pid
+
+CS_HOME=/usr/local/games/cstrike1.6/
+CS_CONFIG_FILE=/etc/sysconfig/cstrike
+[ -f $CS_CONFIG_FILE ] && . $CS_CONFIG_FILE
+CS_LOG=/var/log/cstrike/${PORT}.log
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CS_HOME
+
+
+#old=${CS_HOME}hlds_run -game cstrike -pingboost -noping 2 +sv_lan 0 +ip ${IP:=0.0.0.0} +port ${PORT:=27015} +maxplayers 20 +map cs_bloodstrike -nomaster  -insecure >>$CS_LOG 2>&1 &
+CSTRIKE=${CS_HOME}hlds_i686
+ARGS="hlds_run -game cstrike -insecure +servercfgfile server.cfg -condebug -pingboost 1 -noping 2 +sv_lan 0 +ip ${IP:-192.168.88.44} +port ${PORT:=12315} +maxplayers 14 +map cs_bloodstrike -nomaster -noipx >>$CS_LOG 2>&1 &"
+prog=$(basename $CSTRIKE)
+
+#create a num between 1~RANGE
+get_anum () {
+RANGE=3
+num=$RANDOM
+let "num = $num % $RANGE +1"
+echo $num
+}
+
+#randomly change gamelogo
+change_logo(){
+NEW_LOGO_ID=$(get_anum)
+LOGO_WEB_PAGE_FILE=${CS_HOME}cstrike/motd.txt
+sed -i "s,gamelogo/[0-9][0-9].jpg,gamelogo/0${NEW_LOGO_ID}.jpg,1" $LOGO_WEB_PAGE_FILE
+sed -i "s,172\.[0-9]*\.[0-9]*\.[0-9]*,${IP:-172.30.8.66},1" $LOGO_WEB_PAGE_FILE
+}
+
+
+start() {
+    #[ -f $lockfile ] && echo 'Error: Lockfile exist' && exit 7
+    [ -x $CSTRIKE ] || exit 5
+    echo -n $"Starting cstrike: "
+    cd $CS_HOME
+    while : ; do
+        daemon $CSTRIKE $ARGS && sleep 3
+        rh_status_q && break || stop &>/dev/null
+        #rh_status_q && stop || break
+    done
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && touch $lockfile
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping cstrike: "
+    killproc $prog
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f $lockfile
+    return $retval
+}
+
+restart() {
+    stop
+    sleep 3
+    start
+}
+
+rh_status() {
+    status $prog
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+case "$1" in
+    start)
+        rh_status_q &&  { echo 'Allready started...'; exit 0 ; }
+        $1
+        ;;
+    stop)
+        rh_status_q || { echo 'Did not start...'; exit 0 ; }
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    status)
+        rh_$1
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|restart}"
+        exit 2
+esac
+
